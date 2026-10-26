@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Табата</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Табата">
+<meta name="theme-color" content="#0D0E11">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+/* Layout: one column of stepper rows over a pinned start bar; the run view is a full-bleed screen in the current phase color */
+:root {
+  --bg: #F1F2F4; --surface: #FFFFFF; --fg: #111317; --muted: #6A6F78; --line: #DFE2E7;
+  --work: #E5392E; --rest: #16975A; --setrest: #2C63E6; --prep: #F0A500;
+  --on-work: #FFFFFF; --on-rest: #FFFFFF; --on-setrest: #FFFFFF; --on-prep: #1D1500;
+  --f-num: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D0E11; --surface: #17191E; --fg: #EEF0F3; --muted: #8B909A; --line: #262931;
+    --work: #D8352B; --rest: #138A52; --setrest: #2858CF; --prep: #E39C00;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D0E11; --surface: #17191E; --fg: #EEF0F3; --muted: #8B909A; --line: #262931;
+  --work: #D8352B; --rest: #138A52; --setrest: #2858CF; --prep: #E39C00;
+  color-scheme: dark;
+}
+
+html { box-sizing: border-box; height: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); -webkit-text-size-adjust: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+[hidden] { display: none !important; }
+html.lock, html.lock body { overflow: hidden; }
+body {
+  margin: 0; min-height: 100%;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.4 var(--f-ui);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
+.num, .total, output { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+
+/* ---------- Setup ---------- */
+.app {
+  max-width: 520px; margin: 0 auto;
+  padding-block: 12px 128px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 20px;
+}
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.top h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--surface); display: grid; place-items: center; padding: 0;
+}
+.icon-btn svg { width: 22px; height: 22px; }
+
+.summary { display: flex; flex-direction: column; gap: 8px; }
+.summary .cap { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.total { font-size: 64px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.meta { color: var(--muted); font-size: 15px; }
+.strip { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
+.strip.dense { gap: 0; }
+.strip i { display: block; min-width: 1px; }
+.strip i[data-k="prep"] { background: var(--prep); }
+.strip i[data-k="work"] { background: var(--work); }
+.strip i[data-k="rest"] { background: var(--rest); }
+.strip i[data-k="setrest"] { background: var(--setrest); }
+
+.chips { display: flex; gap: 8px; overflow-x: auto; margin-inline: -4px; padding: 2px 4px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; height: 36px; padding: 0 14px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.chip.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+.rows { background: var(--surface); border-radius: 16px; border: 1px solid var(--line); overflow: hidden; }
+.row {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 12px 12px 12px 16px; transition: opacity .2s;
+}
+.row + .row { border-top: 1px solid var(--line); }
+.row.dim { opacity: 0.45; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c, transparent); border: 2px solid var(--c, var(--muted)); }
+.lbl { display: flex; flex-direction: column; min-width: 0; }
+.lbl b { font-weight: 650; font-size: 17px; }
+.lbl small { color: var(--muted); font-size: 13px; }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper output { min-width: 64px; text-align: center; font-size: 22px; font-weight: 750; }
+.st {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; padding: 0;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  font-size: 24px; font-weight: 500; line-height: 1;
+}
+.st:active { background: color-mix(in srgb, var(--fg) 18%, transparent); }
+.st.off { opacity: 0.3; }
+
+.startbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding-top: 24px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 40%);
+}
+.big-btn {
+  display: block; width: 100%; max-width: 488px; margin: 0 auto; height: 60px;
+  border: 0; border-radius: 18px; background: var(--work); color: var(--on-work);
+  font-size: 20px; font-weight: 750;
+}
+.big-btn:active { filter: brightness(0.92); }
+.ghost-btn {
+  display: block; width: 100%; max-width: 488px; margin: 0 auto; height: 56px;
+  border: 1px solid var(--line); border-radius: 18px; background: var(--surface);
+  font-size: 18px; font-weight: 650;
+}
+
+/* ---------- Run ---------- */
+.run {
+  --pbg: var(--work); --pfg: var(--on-work);
+  position: fixed; inset: 0; z-index: 20;
+  background: var(--pbg); color: var(--pfg);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  transition: background-color .3s;
+}
+.run[data-k="prep"] { --pbg: var(--prep); --pfg: var(--on-prep); }
+.run[data-k="rest"] { --pbg: var(--rest); --pfg: var(--on-rest); }
+.run[data-k="setrest"] { --pbg: var(--setrest); --pfg: var(--on-setrest); }
+.run-top { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.run-top .icon-btn { background: color-mix(in srgb, currentColor 16%, transparent); border: 0; }
+.stop {
+  height: 44px; min-width: 44px; padding: 0 12px; border-radius: 22px; border: 0;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  display: flex; align-items: center; gap: 6px; font-weight: 650; font-size: 15px;
+}
+.stop svg { width: 20px; height: 20px; }
+.stop span { display: none; }
+.stop.armed { background: var(--pfg); color: var(--pbg); }
+.stop.armed span { display: inline; }
+.set-info { font-weight: 650; font-size: 16px; opacity: 0.9; }
+.phase { font-size: clamp(32px, 9vw, 48px); font-weight: 850; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.1; margin-top: 4px; }
+.ring-wrap {
+  position: relative; width: min(84vw, 46vh, 440px); aspect-ratio: 1; max-width: 100%;
+  container-type: inline-size; margin-block: auto; border: 0; padding: 0; background: none; border-radius: 50%;
+}
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg) scaleY(-1); }
+.ring circle { fill: none; stroke: currentColor; stroke-width: 5; }
+.ring .track { opacity: 0.22; }
+.ring .arc { stroke-linecap: round; stroke-dasharray: 100 100; }
+.num {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 46cqw; font-weight: 800; line-height: 1; letter-spacing: -0.03em;
+}
+.num.long { font-size: 30cqw; }
+.run.paused .num { animation: blink 1.1s steps(2, jump-none) infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+.rounds { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rounds-txt { font-weight: 650; font-size: 17px; }
+.dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 320px; }
+.dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; opacity: 0.45; }
+.dots i.done { background: currentColor; opacity: 0.9; }
+.dots i.cur { background: currentColor; opacity: 1; transform: scale(1.25); }
+.next { font-size: 16px; opacity: 0.85; min-height: 22px; }
+.ctrls { display: flex; align-items: center; gap: 28px; margin-top: 4px; }
+.c-sm, .c-lg { border: 0; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+.c-sm { width: 64px; height: 64px; background: color-mix(in srgb, currentColor 16%, transparent); }
+.c-sm svg { width: 28px; height: 28px; }
+.c-lg { width: 92px; height: 92px; background: var(--pfg); color: var(--pbg); }
+.c-lg svg { width: 40px; height: 40px; }
+.c-sm:active, .c-lg:active { transform: scale(0.95); }
+.foot { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.foot-row { display: flex; justify-content: space-between; opacity: 0.9; }
+.foot b { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, currentColor 25%, transparent); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: currentColor; border-radius: 3px; }
+
+/* ---------- Done ---------- */
+.done {
+  position: fixed; inset: 0; z-index: 20; background: var(--bg);
+  display: flex; flex-direction: column; justify-content: center; gap: 28px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.done-body { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.done h2 { margin: 0; font-size: 40px; font-weight: 850; }
+.done .total { font-size: 80px; }
+.done-btns { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .run, .row { transition: none; }
+  .run.paused .num { animation: none; opacity: 0.5; }
+}
+@media (max-height: 760px) {
+  .run { gap: 8px; }
+  .ring-wrap { width: min(80vw, 38vh, 440px); }
+}
+@media (max-height: 640px) {
+  .phase { font-size: 30px; }
+  .ctrls { gap: 20px; }
+  .c-lg { width: 76px; height: 76px; }
+  .c-sm { width: 56px; height: 56px; }
+}
+</style>
+</head>
+<body>
+<main class="app" id="setup">
+  <header class="top">
+    <h1>Табата</h1>
+    <button class="icon-btn snd" id="snd1" aria-label="Звук"></button>
+  </header>
+
+  <section class="summary">
+    <span class="cap">Общее время</span>
+    <div class="total" id="total">4:10</div>
+    <div class="meta" id="meta"></div>
+    <div class="strip" id="strip"></div>
+  </section>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="rows" id="rows"></div>
+</main>
+
+<div class="startbar" id="startbar">
+  <button class="big-btn" id="go">Старт</button>
+</div>
+
+<section class="run" id="run" data-k="prep" hidden>
+  <div class="run-top">
+    <button class="stop" id="stop" aria-label="Завершить тренировку">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+      <span>Завершить?</span>
+    </button>
+    <div class="set-info" id="setInfo"></div>
+    <button class="icon-btn snd" id="snd2" aria-label="Звук"></button>
+  </div>
+  <div class="phase" id="phase">Готовься</div>
+  <button class="ring-wrap" id="ring" aria-label="Пауза или продолжить">
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"/>
+      <circle class="arc" id="arc" cx="50" cy="50" r="46" pathLength="100"/>
+    </svg>
+    <span class="num" id="num">10</span>
+  </button>
+  <div class="rounds">
+    <div class="rounds-txt" id="roundsTxt"></div>
+    <div class="dots" id="dots"></div>
+  </div>
+  <div class="next" id="next"></div>
+  <div class="ctrls">
+    <button class="c-sm" id="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.5v11a1 1 0 0 1-1.55.83L9.5 13v-2l7.95-5.33A1 1 0 0 1 19 6.5zM5 6h2.5v12H5z"/></svg>
+    </button>
+    <button class="c-lg" id="pp" aria-label="Пауза"></button>
+    <button class="c-sm" id="fwd" aria-label="Пропустить">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 6.5v11a1 1 0 0 0 1.55.83L14.5 13v-2L6.55 5.67A1 1 0 0 0 5 6.5zM16.5 6H19v12h-2.5z"/></svg>
+    </button>
+  </div>
+  <div class="foot">
+    <div class="foot-row"><span>Осталось <b id="left">0:00</b></span><span id="elapsed"></span></div>
+    <div class="bar"><i id="barFill"></i></div>
+  </div>
+</section>
+
+<section class="done" id="done" hidden>
+  <div class="done-body">
+    <h2>Готово</h2>
+    <div class="total" id="doneTotal">4:10</div>
+    <div class="meta" id="doneMeta"></div>
+  </div>
+  <div class="done-btns">
+    <button class="big-btn" id="again">Ещё раз</button>
+    <button class="ghost-btn" id="toSetup">К настройкам</button>
+  </div>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Settings ----------
+  const FIELDS = [
+    { k: 'work',    label: 'Работа',     hint: 'время раунда',         min: 5, max: 600, step: 5,  time: true, c: 'work' },
+    { k: 'rest',    label: 'Отдых',      hint: 'между раундами',        min: 0, max: 600, step: 5,  time: true, c: 'rest' },
+    { k: 'rounds',  label: 'Раунды',     hint: 'в одном подходе',       min: 1, max: 50,  step: 1 },
+    { k: 'sets',    label: 'Подходы',    hint: 'повторы цикла',         min: 1, max: 20,  step: 1 },
+    { k: 'setRest', label: 'Пауза',      hint: 'между подходами',       min: 0, max: 900, step: 15, time: true, c: 'setrest' },
+    { k: 'prep',    label: 'Подготовка', hint: 'перед стартом',         min: 0, max: 60,  step: 5,  time: true, c: 'prep' },
+  ];
+  const PRESETS = [
+    { name: 'Табата 20/10 ×8', v: { work: 20, rest: 10, rounds: 8, sets: 1 } },
+    { name: '4 подхода табаты', v: { work: 20, rest: 10, rounds: 8, sets: 4, setRest: 60 } },
+    { name: '40/20 ×10',        v: { work: 40, rest: 20, rounds: 10, sets: 1 } },
+    { name: '30/30 ×10',        v: { work: 30, rest: 30, rounds: 10, sets: 1 } },
+  ];
+  const NAMES = { prep: 'Готовься', work: 'Работа', rest: 'Отдых', setrest: 'Пауза' };
+
+  const S = { work: 20, rest: 10, rounds: 8, sets: 1, setRest: 60, prep: 10 };
+  let sound = true;
+  try {
+    const saved = JSON.parse(localStorage.getItem('tabata') || 'null');
+    if (saved) {
+      for (const f of FIELDS) {
+        const v = Number(saved.s && saved.s[f.k]);
+        if (Number.isFinite(v)) S[f.k] = Math.min(f.max, Math.max(f.min, v));
+      }
+      if (typeof saved.sound === 'boolean') sound = saved.sound;
+    }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem('tabata', JSON.stringify({ s: S, sound })); } catch (e) {} };
+
+  const fmt = (s) => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  const pl = (n, a, b, c) => { const d = n % 10, h = n % 100; return d === 1 && h !== 11 ? a : d >= 2 && d <= 4 && (h < 12 || h > 14) ? b : c; };
+  const metaText = (s) => `${s.rounds} ${pl(s.rounds, 'раунд', 'раунда', 'раундов')} × ${s.sets} ${pl(s.sets, 'подход', 'подхода', 'подходов')} · работа ${fmt(s.work * s.rounds * s.sets)}`;
+
+  function build(s) {
+    const ph = [];
+    if (s.prep > 0) ph.push({ k: 'prep', d: s.prep, set: 1, round: 0 });
+    for (let set = 1; set <= s.sets; set++) {
+      for (let r = 1; r <= s.rounds; r++) {
+        ph.push({ k: 'work', d: s.work, set, round: r });
+        if (r < s.rounds && s.rest > 0) ph.push({ k: 'rest', d: s.rest, set, round: r });
+      }
+      if (set < s.sets && s.setRest > 0) ph.push({ k: 'setrest', d: s.setRest, set, round: s.rounds });
+    }
+    let at = 0;
+    for (const p of ph) { p.start = at; at += p.d; }
+    return { ph, total: at };
+  }
+
+  // Rows
+  $('rows').innerHTML = FIELDS.map((f) => `
+    <div class="row" id="row-${f.k}">
+      <span class="dot" ${f.c ? `style="--c: var(--${f.c})"` : ''}></span>
+      <div class="lbl"><b>${f.label}</b><small>${f.hint}</small></div>
+      <div class="stepper">
+        <button class="st" data-k="${f.k}" data-d="-1" aria-label="${f.label}: меньше">−</button>
+        <output id="v-${f.k}"></output>
+        <button class="st" data-k="${f.k}" data-d="1" aria-label="${f.label}: больше">+</button>
+      </div>
+    </div>`).join('');
+
+  $('chips').innerHTML = PRESETS.map((p, i) => `<button class="chip" data-i="${i}">${p.name}</button>`).join('');
+  $('chips').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    Object.assign(S, PRESETS[b.dataset.i].v);
+    renderSetup();
+  });
+
+  function stepField(k, dir) {
+    const f = FIELDS.find((x) => x.k === k);
+    const v = Math.min(f.max, Math.max(f.min, S[k] + dir * f.step));
+    if (v === S[k]) return false;
+    S[k] = v;
+    renderSetup();
+    return true;
+  }
+
+  // Press-and-hold repeat
+  let holdT = 0, holdI = 0;
+  const holdStop = () => { clearTimeout(holdT); clearInterval(holdI); holdT = holdI = 0; };
+  for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, holdStop);
+  $('rows').addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('.st');
+    if (!b || e.button > 0) return;
+    e.preventDefault();
+    holdStop();
+    const go = () => { if (!stepField(b.dataset.k, +b.dataset.d)) holdStop(); };
+    go();
+    holdT = setTimeout(() => { holdI = setInterval(go, 80); }, 400);
+  });
+  $('rows').addEventListener('pointerleave', holdStop);
+  $('rows').addEventListener('click', (e) => {
+    const b = e.target.closest('.st');
+    if (b && e.detail === 0) stepField(b.dataset.k, +b.dataset.d); // keyboard
+  });
+
+  function renderSetup() {
+    for (const f of FIELDS) {
+      $('v-' + f.k).textContent = f.time ? fmt(S[f.k]) : '×' + S[f.k];
+      const btns = document.querySelectorAll(`.st[data-k="${f.k}"]`);
+      btns[0].classList.toggle('off', S[f.k] <= f.min);
+      btns[1].classList.toggle('off', S[f.k] >= f.max);
+    }
+    $('row-setRest').classList.toggle('dim', S.sets < 2);
+    const tl = build(S);
+    $('total').textContent = fmt(tl.total);
+    $('meta').textContent = metaText(S);
+    const strip = $('strip');
+    strip.classList.toggle('dense', tl.ph.length > 60);
+    strip.innerHTML = tl.ph.map((p) => `<i data-k="${p.k}" style="flex-grow:${p.d}"></i>`).join('');
+    document.querySelectorAll('.chip').forEach((c) => {
+      const v = PRESETS[c.dataset.i].v;
+      c.classList.toggle('on', Object.keys(v).every((k) => S[k] === v[k]));
+    });
+    save();
+  }
+
+  // ---------- Sound ----------
+  let ac = null;
+  function unlock() {
+    try {
+      if (!ac) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return;
+        ac = new C();
+      }
+      if (ac.state !== 'running') ac.resume();
+      const src = ac.createBufferSource();
+      src.buffer = ac.createBuffer(1, 1, 22050);
+      src.connect(ac.destination);
+      src.start(0);
+    } catch (e) {}
+  }
+  function tone(freq, dur, when = 0, vol = 0.35) {
+    if (!sound || !ac) return;
+    try {
+      const t = ac.currentTime + when;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.setValueAtTime(vol, t + dur - 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(ac.destination);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    } catch (e) {}
+  }
+  const cue = {
+    tick: () => tone(880, 0.12),
+    work: () => tone(1320, 0.55),
+    rest: () => tone(660, 0.55),
+    done: () => { tone(880, 0.15); tone(1100, 0.15, 0.2); tone(1320, 0.7, 0.4); },
+  };
+  const SND_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  const SND_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  function renderSound() {
+    for (const id of ['snd1', 'snd2']) {
+      $(id).innerHTML = sound ? SND_ON : SND_OFF;
+      $(id).setAttribute('aria-label', sound ? 'Выключить звук' : 'Включить звук');
+    }
+  }
+  for (const id of ['snd1', 'snd2']) $(id).addEventListener('click', () => { sound = !sound; unlock(); renderSound(); save(); });
+  document.addEventListener('pointerdown', () => { if (ac && ac.state !== 'running') ac.resume(); }, true);
+
+  // ---------- Wake lock ----------
+  let wl = null;
+  async function lock() {
+    try { if ('wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); } } catch (e) { wl = null; }
+  }
+  function release() { try { if (wl) wl.release(); } catch (e) {} wl = null; }
+
+  // ---------- Engine ----------
+  let R = null, raf = 0, iv = 0, cfg = null;
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 5h4.2v14H6zM13.8 5H18v14h-4.2z"/></svg>';
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.2v13.6a1 1 0 0 0 1.52.85l10.9-6.8a1 1 0 0 0 0-1.7L9.52 4.35A1 1 0 0 0 8 5.2z"/></svg>';
+
+  function show(view) {
+    $('run').hidden = view !== 'run';
+    $('done').hidden = view !== 'done';
+    $('startbar').hidden = view !== 'setup';
+    document.documentElement.classList.toggle('lock', view !== 'setup');
+  }
+
+  const elapsed = () => R.base + (R.t0 ? Date.now() - R.t0 : 0);
+
+  function startLoop() {
+    stopLoop();
+    const loop = () => { tick(); if (R && R.t0) raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    iv = setInterval(tick, 250);
+  }
+  function stopLoop() { cancelAnimationFrame(raf); clearInterval(iv); raf = iv = 0; }
+
+  function start() {
+    unlock();
+    cfg = { ...S };
+    R = { tl: build(cfg), base: 0, t0: Date.now(), idx: -1, cue: 0, num: '' };
+    const n = cfg.rounds <= 24 ? cfg.rounds : 0;
+    $('dots').innerHTML = '<i></i>'.repeat(n);
+    show('run');
+    renderPP();
+    lock();
+    startLoop();
+    tick();
+  }
+
+  function phaseAt(e) {
+    const ph = R.tl.ph;
+    let i = Math.max(0, R.idx);
+    while (i < ph.length - 1 && e >= ph[i].start + ph[i].d) i++;
+    while (i > 0 && e < ph[i].start) i--;
+    return i;
+  }
+
+  function enter(p, i) {
+    const ph = R.tl.ph;
+    $('run').dataset.k = p.k;
+    $('phase').textContent = NAMES[p.k];
+    $('setInfo').textContent = cfg.sets > 1 ? `Подход ${p.set} из ${cfg.sets}` : '';
+    $('roundsTxt').textContent = p.k === 'prep' ? `${cfg.rounds} ${pl(cfg.rounds, 'раунд', 'раунда', 'раундов')}`
+      : p.k === 'setrest' ? `Подход ${p.set} завершён` : `Раунд ${p.round} из ${cfg.rounds}`;
+    const dots = $('dots').children;
+    for (let j = 0; j < dots.length; j++) {
+      const r = j + 1;
+      dots[j].className = r < p.round || (r === p.round && p.k !== 'work') ? 'done' : r === p.round ? 'cur' : '';
+    }
+    const n = ph[i + 1];
+    $('next').textContent = n ? `Далее: ${NAMES[n.k].toLowerCase()} ${fmt(n.d)}` : 'Далее: финиш';
+  }
+
+  function tick() {
+    if (!R) return;
+    const e = elapsed() / 1000, tl = R.tl;
+    if (e >= tl.total) return finish();
+    const i = phaseAt(e), p = tl.ph[i];
+    if (i !== R.idx) {
+      R.idx = i;
+      R.cue = 0;
+      enter(p, i);
+      if (R.t0 && e - p.start < 0.5) (p.k === 'work' ? cue.work : p.k === 'prep' ? () => {} : cue.rest)();
+    }
+    const rem = p.start + p.d - e, sec = Math.ceil(rem);
+    if (sec <= 3 && sec < p.d && sec !== R.cue) {
+      R.cue = sec;
+      if (R.t0 && sec - rem < 0.5) cue.tick();
+    }
+    const txt = fmt(sec).replace(/^0:0?/, '');
+    if (txt !== R.num) {
+      R.num = txt;
+      $('num').textContent = txt;
+      $('num').classList.toggle('long', txt.includes(':'));
+    }
+    $('arc').style.strokeDashoffset = (100 * (1 - rem / p.d)).toFixed(2);
+    $('left').textContent = fmt(Math.ceil(tl.total - e));
+    $('barFill').style.width = (100 * e / tl.total).toFixed(2) + '%';
+  }
+
+  function renderPP() {
+    const running = R && R.t0;
+    $('pp').innerHTML = running ? ICON_PAUSE : ICON_PLAY;
+    $('pp').setAttribute('aria-label', running ? 'Пауза' : 'Продолжить');
+    $('run').classList.toggle('paused', !running);
+    if (R && !running) $('next').textContent = 'Пауза — нажмите ▶';
+    else if (R && R.idx >= 0) enter(R.tl.ph[R.idx], R.idx);
+  }
+
+  function toggle() {
+    if (!R) return;
+    unlock();
+    if (R.t0) { R.base = elapsed(); R.t0 = 0; stopLoop(); release(); }
+    else { R.t0 = Date.now(); lock(); startLoop(); }
+    renderPP();
+    tick();
+  }
+
+  function seek(sec) {
+    R.base = sec * 1000;
+    if (R.t0) R.t0 = Date.now();
+    R.idx = -1;
+    tick();
+    if (R && !R.t0) renderPP();
+  }
+
+  function finish() {
+    stopLoop();
+    release();
+    cue.done();
+    $('doneTotal').textContent = fmt(R.tl.total);
+    $('doneMeta').textContent = metaText(cfg);
+    R = null;
+    show('done');
+  }
+
+  function quit() { stopLoop(); release(); R = null; show('setup'); }
+
+  $('go').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  $('toSetup').addEventListener('click', () => show('setup'));
+  $('pp').addEventListener('click', toggle);
+  $('ring').addEventListener('click', toggle);
+  $('fwd').addEventListener('click', () => {
+    if (!R) return;
+    unlock();
+    const n = R.tl.ph[R.idx + 1];
+    seek(n ? n.start : R.tl.total);
+  });
+  $('back').addEventListener('click', () => {
+    if (!R) return;
+    unlock();
+    const p = R.tl.ph[R.idx];
+    seek(elapsed() / 1000 - p.start > 2 || R.idx === 0 ? p.start : R.tl.ph[R.idx - 1].start);
+  });
+
+  let armed = 0;
+  const disarm = () => { clearTimeout(armed); armed = 0; $('stop').classList.remove('armed'); };
+  $('stop').addEventListener('click', () => {
+    if (armed) { disarm(); quit(); return; }
+    $('stop').classList.add('armed');
+    armed = setTimeout(disarm, 3000);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && R && R.t0) { lock(); tick(); }
+  });
+
+  renderSound();
+  renderSetup();
+  show('setup');
+})();
+</script>
+<!--sw-->
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+<!--/sw-->
+</body>
+</html>
