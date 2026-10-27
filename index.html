@@ -65,7 +65,7 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 .icon-btn svg { width: 22px; height: 22px; }
 
 .summary { display: flex; flex-direction: column; gap: 8px; }
-.summary .cap { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.cap { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .total { font-size: 64px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
 .meta { color: var(--muted); font-size: 15px; }
 .strip { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
@@ -75,6 +75,15 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 .strip i[data-k="work"] { background: var(--work); }
 .strip i[data-k="rest"] { background: var(--rest); }
 .strip i[data-k="setrest"] { background: var(--setrest); }
+
+.seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.seg button { height: 40px; border: 0; border-radius: 10px; background: none; font-size: 16px; font-weight: 650; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
+.groups { display: flex; flex-direction: column; gap: 8px; }
+.groups .cap { padding: 10px 4px 0; }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; margin-inline: -4px; padding: 2px 4px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
@@ -153,7 +162,8 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 .stop.armed { background: var(--pfg); color: var(--pbg); }
 .stop.armed span { display: inline; }
 .set-info { font-weight: 650; font-size: 16px; opacity: 0.9; }
-.phase { font-size: clamp(32px, 9vw, 48px); font-weight: 850; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.1; margin-top: 4px; }
+.phase { font-size: clamp(32px, 9vw, 48px); font-weight: 850; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.1; margin-top: 4px; text-align: center; text-wrap: balance; }
+.phase.long { font-size: clamp(26px, 7vw, 40px); letter-spacing: 0.03em; }
 .ring-wrap {
   position: relative; width: min(84vw, 46vh, 440px); aspect-ratio: 1; max-width: 100%;
   container-type: inline-size; margin-block: auto; border: 0; padding: 0; background: none; border-radius: 50%;
@@ -167,6 +177,8 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   font-size: 46cqw; font-weight: 800; line-height: 1; letter-spacing: -0.03em;
 }
 .num.long { font-size: 30cqw; }
+.ring-wrap.reps .num { padding-bottom: 10cqw; }
+.unit { position: absolute; left: 0; right: 0; top: 66%; text-align: center; font-size: 6.5cqw; font-weight: 650; opacity: 0.85; font-variant-numeric: tabular-nums; }
 .run.paused .num { animation: blink 1.1s steps(2, jump-none) infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
 .rounds { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -222,12 +234,17 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 <body>
 <main class="app" id="setup">
   <header class="top">
-    <h1>Табата</h1>
+    <h1>Тренировка</h1>
     <button class="icon-btn snd" id="snd1" aria-label="Звук"></button>
   </header>
 
+  <div class="seg" role="group" aria-label="Режим">
+    <button data-mode="tabata" aria-pressed="true">Табата</button>
+    <button data-mode="circuit" aria-pressed="false">Зарядка</button>
+  </div>
+
   <section class="summary">
-    <span class="cap">Общее время</span>
+    <span class="cap" id="totalCap">Общее время</span>
     <div class="total" id="total">4:10</div>
     <div class="meta" id="meta"></div>
     <div class="strip" id="strip"></div>
@@ -235,7 +252,7 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 
   <div class="chips" id="chips"></div>
 
-  <div class="rows" id="rows"></div>
+  <div class="groups" id="rows"></div>
 </main>
 
 <div class="startbar" id="startbar">
@@ -258,6 +275,7 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
       <circle class="arc" id="arc" cx="50" cy="50" r="46" pathLength="100"/>
     </svg>
     <span class="num" id="num">10</span>
+    <span class="unit" id="unit"></span>
   </button>
   <div class="rounds">
     <div class="rounds-txt" id="roundsTxt"></div>
@@ -296,7 +314,7 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   const $ = (id) => document.getElementById(id);
 
   // ---------- Settings ----------
-  const FIELDS = [
+  const TABATA = [
     { k: 'work',    label: 'Работа',     hint: 'время раунда',         min: 5, max: 600, step: 5,  time: true, c: 'work' },
     { k: 'rest',    label: 'Отдых',      hint: 'между раундами',        min: 0, max: 600, step: 5,  time: true, c: 'rest' },
     { k: 'rounds',  label: 'Раунды',     hint: 'в одном подходе',       min: 1, max: 50,  step: 1 },
@@ -304,6 +322,29 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
     { k: 'setRest', label: 'Пауза',      hint: 'между подходами',       min: 0, max: 900, step: 15, time: true, c: 'setrest' },
     { k: 'prep',    label: 'Подготовка', hint: 'перед стартом',         min: 0, max: 60,  step: 5,  time: true, c: 'prep' },
   ];
+  // Morning circuit: exercises on reps end with «Готово», timed ones count down.
+  // spr = rough seconds per rep, only for the time estimate.
+  const EXERCISES = [
+    { name: 'Отжимания',       reps: 15, spr: 2.5 },
+    { name: 'Приседания',      reps: 20, spr: 2.5 },
+    { name: 'Подъёмы корпуса', reps: 15, spr: 2.5 },
+    { name: 'Бёрпи',           reps: 10, spr: 5 },
+    { name: 'Планка',          sec: 45 },
+  ];
+  const CIRCUIT = [
+    ...EXERCISES.map((e, i) => e.sec
+      ? { k: 'e' + i, label: e.name, hint: 'удержание', min: 10, max: 300, step: 5, time: true, c: 'work', ex: true }
+      : { k: 'e' + i, label: e.name, hint: 'повторений', min: 1, max: 100, step: 1, c: 'work', ex: true }),
+    { k: 'rest',    label: 'Отдых',      hint: 'между упражнениями',    min: 0, max: 300, step: 5,  time: true, c: 'rest' },
+    { k: 'sets',    label: 'Круги',      hint: 'сколько раз пройти',    min: 1, max: 10,  step: 1 },
+    { k: 'setRest', label: 'Пауза',      hint: 'между кругами',         min: 0, max: 600, step: 15, time: true, c: 'setrest' },
+    { k: 'prep',    label: 'Подготовка', hint: 'перед стартом',         min: 0, max: 60,  step: 5,  time: true, c: 'prep' },
+  ];
+  const MODES = { tabata: TABATA, circuit: CIRCUIT };
+  const WORDS = {
+    tabata:  { round: 'Раунд',      set: 'Подход', rounds: ['раунд', 'раунда', 'раундов'],              sets: ['подход', 'подхода', 'подходов'] },
+    circuit: { round: 'Упражнение', set: 'Круг',   rounds: ['упражнение', 'упражнения', 'упражнений'], sets: ['круг', 'круга', 'кругов'] },
+  };
   const PRESETS = [
     { name: 'Табата 20/10 ×8', v: { work: 20, rest: 10, rounds: 8, sets: 1 } },
     { name: '4 подхода табаты', v: { work: 20, rest: 10, rounds: 8, sets: 4, setRest: 60 } },
@@ -312,41 +353,63 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   ];
   const NAMES = { prep: 'Готовься', work: 'Работа', rest: 'Отдых', setrest: 'Пауза' };
 
-  const S = { work: 20, rest: 10, rounds: 8, sets: 1, setRest: 60, prep: 10 };
-  let sound = true;
+  const V = {
+    tabata: { work: 20, rest: 10, rounds: 8, sets: 1, setRest: 60, prep: 10 },
+    circuit: { rest: 10, sets: 3, setRest: 60, prep: 10 },
+  };
+  EXERCISES.forEach((e, i) => { V.circuit['e' + i] = e.reps || e.sec; });
+  let mode = 'tabata', sound = true;
   try {
     const saved = JSON.parse(localStorage.getItem('tabata') || 'null');
     if (saved) {
-      for (const f of FIELDS) {
-        const v = Number(saved.s && saved.s[f.k]);
-        if (Number.isFinite(v)) S[f.k] = Math.min(f.max, Math.max(f.min, v));
-      }
+      const load = (fields, src, dst) => {
+        for (const f of fields) {
+          const v = Number(src && src[f.k]);
+          if (Number.isFinite(v)) dst[f.k] = Math.min(f.max, Math.max(f.min, v));
+        }
+      };
+      load(TABATA, saved.s, V.tabata);
+      load(CIRCUIT, saved.c, V.circuit);
+      if (MODES[saved.mode]) mode = saved.mode;
       if (typeof saved.sound === 'boolean') sound = saved.sound;
     }
   } catch (e) {}
-  const save = () => { try { localStorage.setItem('tabata', JSON.stringify({ s: S, sound })); } catch (e) {} };
+  const save = () => { try { localStorage.setItem('tabata', JSON.stringify({ s: V.tabata, c: V.circuit, mode, sound })); } catch (e) {} };
 
   const fmt = (s) => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const pl = (n, a, b, c) => { const d = n % 10, h = n % 100; return d === 1 && h !== 11 ? a : d >= 2 && d <= 4 && (h < 12 || h > 14) ? b : c; };
-  const metaText = (s) => `${s.rounds} ${pl(s.rounds, 'раунд', 'раунда', 'раундов')} × ${s.sets} ${pl(s.sets, 'подход', 'подхода', 'подходов')} · работа ${fmt(s.work * s.rounds * s.sets)}`;
+  const metaText = (tl) => {
+    const w = WORDS[tl.mode];
+    const base = `${tl.perSet} ${pl(tl.perSet, ...w.rounds)} × ${tl.sets} ${pl(tl.sets, ...w.sets)}`;
+    return tl.exact ? `${base} · работа ${fmt(tl.workTime)}` : base;
+  };
 
-  function build(s) {
+  // Phases: timed ones have d (seconds); reps ones have reps and an estimated duration
+  function build(m, v) {
+    const items = m === 'circuit'
+      ? EXERCISES.map((e, i) => e.sec ? { name: e.name, d: v['e' + i] } : { name: e.name, reps: v['e' + i], est: v['e' + i] * e.spr })
+      : Array.from({ length: v.rounds }, () => ({ d: v.work }));
     const ph = [];
-    if (s.prep > 0) ph.push({ k: 'prep', d: s.prep, set: 1, round: 0 });
-    for (let set = 1; set <= s.sets; set++) {
-      for (let r = 1; r <= s.rounds; r++) {
-        ph.push({ k: 'work', d: s.work, set, round: r });
-        if (r < s.rounds && s.rest > 0) ph.push({ k: 'rest', d: s.rest, set, round: r });
-      }
-      if (set < s.sets && s.setRest > 0) ph.push({ k: 'setrest', d: s.setRest, set, round: s.rounds });
+    if (v.prep > 0) ph.push({ k: 'prep', d: v.prep, set: 1, round: 0 });
+    for (let set = 1; set <= v.sets; set++) {
+      items.forEach((it, j) => {
+        ph.push({ k: 'work', ...it, set, round: j + 1 });
+        if (j < items.length - 1 && v.rest > 0) ph.push({ k: 'rest', d: v.rest, set, round: j + 1 });
+      });
+      if (set < v.sets && v.setRest > 0) ph.push({ k: 'setrest', d: v.setRest, set, round: items.length });
     }
-    let at = 0;
-    for (const p of ph) { p.start = at; at += p.d; }
-    return { ph, total: at };
+    let at = 0, workTime = 0;
+    for (const p of ph) {
+      p.est = p.d || p.est;
+      p.start = at;
+      at += p.est;
+      if (p.k === 'work') workTime += p.est;
+    }
+    return { ph, total: at, workTime, perSet: items.length, sets: v.sets, mode: m, exact: ph.every((p) => p.d) };
   }
 
-  // Rows
-  $('rows').innerHTML = FIELDS.map((f) => `
+  // ---------- Setup screen ----------
+  const rowHTML = (f) => `
     <div class="row" id="row-${f.k}">
       <span class="dot" ${f.c ? `style="--c: var(--${f.c})"` : ''}></span>
       <div class="lbl"><b>${f.label}</b><small>${f.hint}</small></div>
@@ -355,21 +418,38 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
         <output id="v-${f.k}"></output>
         <button class="st" data-k="${f.k}" data-d="1" aria-label="${f.label}: больше">+</button>
       </div>
-    </div>`).join('');
+    </div>`;
+
+  function renderRows() {
+    const fields = MODES[mode], ex = fields.filter((f) => f.ex), other = fields.filter((f) => !f.ex);
+    $('rows').innerHTML = (ex.length
+      ? `<div class="cap">Упражнения · один круг</div><div class="rows">${ex.map(rowHTML).join('')}</div><div class="cap">Круги и отдых</div>`
+      : '') + `<div class="rows">${other.map(rowHTML).join('')}</div>`;
+    document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('chips').hidden = mode !== 'tabata';
+  }
+
+  document.querySelector('.seg').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    renderRows();
+    renderSetup();
+  });
 
   $('chips').innerHTML = PRESETS.map((p, i) => `<button class="chip" data-i="${i}">${p.name}</button>`).join('');
   $('chips').addEventListener('click', (e) => {
     const b = e.target.closest('.chip');
     if (!b) return;
-    Object.assign(S, PRESETS[b.dataset.i].v);
+    Object.assign(V.tabata, PRESETS[b.dataset.i].v);
     renderSetup();
   });
 
   function stepField(k, dir) {
-    const f = FIELDS.find((x) => x.k === k);
-    const v = Math.min(f.max, Math.max(f.min, S[k] + dir * f.step));
-    if (v === S[k]) return false;
-    S[k] = v;
+    const f = MODES[mode].find((x) => x.k === k), v = V[mode];
+    const n = Math.min(f.max, Math.max(f.min, v[k] + dir * f.step));
+    if (n === v[k]) return false;
+    v[k] = n;
     renderSetup();
     return true;
   }
@@ -394,22 +474,24 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   });
 
   function renderSetup() {
-    for (const f of FIELDS) {
-      $('v-' + f.k).textContent = f.time ? fmt(S[f.k]) : '×' + S[f.k];
+    const v = V[mode];
+    for (const f of MODES[mode]) {
+      $('v-' + f.k).textContent = f.time ? fmt(v[f.k]) : '×' + v[f.k];
       const btns = document.querySelectorAll(`.st[data-k="${f.k}"]`);
-      btns[0].classList.toggle('off', S[f.k] <= f.min);
-      btns[1].classList.toggle('off', S[f.k] >= f.max);
+      btns[0].classList.toggle('off', v[f.k] <= f.min);
+      btns[1].classList.toggle('off', v[f.k] >= f.max);
     }
-    $('row-setRest').classList.toggle('dim', S.sets < 2);
-    const tl = build(S);
-    $('total').textContent = fmt(tl.total);
-    $('meta').textContent = metaText(S);
+    $('row-setRest').classList.toggle('dim', v.sets < 2);
+    const tl = build(mode, v);
+    $('totalCap').textContent = tl.exact ? 'Общее время' : 'Примерное время';
+    $('total').textContent = tl.exact ? fmt(tl.total) : `≈${Math.round(tl.total / 60)} мин`;
+    $('meta').textContent = metaText(tl);
     const strip = $('strip');
     strip.classList.toggle('dense', tl.ph.length > 60);
-    strip.innerHTML = tl.ph.map((p) => `<i data-k="${p.k}" style="flex-grow:${p.d}"></i>`).join('');
+    strip.innerHTML = tl.ph.map((p) => `<i data-k="${p.k}" style="flex-grow:${p.est}"></i>`).join('');
     document.querySelectorAll('.chip').forEach((c) => {
-      const v = PRESETS[c.dataset.i].v;
-      c.classList.toggle('on', Object.keys(v).every((k) => S[k] === v[k]));
+      const pv = PRESETS[c.dataset.i].v;
+      c.classList.toggle('on', Object.keys(pv).every((k) => V.tabata[k] === pv[k]));
     });
     save();
   }
@@ -471,9 +553,11 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   function release() { try { if (wl) wl.release(); } catch (e) {} wl = null; }
 
   // ---------- Engine ----------
-  let R = null, raf = 0, iv = 0, cfg = null;
+  // R.pBase: ms spent in the current phase, R.wBase: ms of active workout, both banked up to R.t0 (0 = paused)
+  let R = null, raf = 0, iv = 0;
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 5h4.2v14H6zM13.8 5H18v14h-4.2z"/></svg>';
   const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5.2v13.6a1 1 0 0 0 1.52.85l10.9-6.8a1 1 0 0 0 0-1.7L9.52 4.35A1 1 0 0 0 8 5.2z"/></svg>';
+  const ICON_DONE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function show(view) {
     $('run').hidden = view !== 'run';
@@ -482,7 +566,13 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
     document.documentElement.classList.toggle('lock', view !== 'setup');
   }
 
-  const elapsed = () => R.base + (R.t0 ? Date.now() - R.t0 : 0);
+  function fold() {
+    if (!R.t0) return;
+    const n = Date.now(), dt = n - R.t0;
+    R.pBase += dt;
+    R.wBase += dt;
+    R.t0 = n;
+  }
 
   function startLoop() {
     stopLoop();
@@ -494,100 +584,130 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
 
   function start() {
     unlock();
-    cfg = { ...S };
-    R = { tl: build(cfg), base: 0, t0: Date.now(), idx: -1, cue: 0, num: '' };
-    const n = cfg.rounds <= 24 ? cfg.rounds : 0;
-    $('dots').innerHTML = '<i></i>'.repeat(n);
+    const tl = build(mode, { ...V[mode] });
+    R = { tl, idx: 0, pBase: 0, wBase: 0, t0: Date.now(), shown: -1, cue: 0, num: '' };
+    $('dots').innerHTML = '<i></i>'.repeat(tl.perSet <= 24 ? tl.perSet : 0);
     show('run');
-    renderPP();
     lock();
     startLoop();
     tick();
   }
 
-  function phaseAt(e) {
-    const ph = R.tl.ph;
-    let i = Math.max(0, R.idx);
-    while (i < ph.length - 1 && e >= ph[i].start + ph[i].d) i++;
-    while (i > 0 && e < ph[i].start) i--;
-    return i;
-  }
-
-  function enter(p, i) {
-    const ph = R.tl.ph;
+  function enter(p) {
+    const tl = R.tl, w = WORDS[tl.mode];
+    const title = p.k === 'work' && p.name ? p.name : NAMES[p.k];
     $('run').dataset.k = p.k;
-    $('phase').textContent = NAMES[p.k];
-    $('setInfo').textContent = cfg.sets > 1 ? `Подход ${p.set} из ${cfg.sets}` : '';
-    $('roundsTxt').textContent = p.k === 'prep' ? `${cfg.rounds} ${pl(cfg.rounds, 'раунд', 'раунда', 'раундов')}`
-      : p.k === 'setrest' ? `Подход ${p.set} завершён` : `Раунд ${p.round} из ${cfg.rounds}`;
+    $('phase').textContent = title;
+    $('phase').classList.toggle('long', title.length > 10);
+    $('ring').classList.toggle('reps', !p.d);
+    $('setInfo').textContent = tl.sets > 1 ? `${w.set} ${p.set} из ${tl.sets}` : '';
+    $('roundsTxt').textContent = p.k === 'prep' ? `${tl.perSet} ${pl(tl.perSet, ...w.rounds)}`
+      : p.k === 'setrest' ? `${w.set} ${p.set} завершён` : `${w.round} ${p.round} из ${tl.perSet}`;
     const dots = $('dots').children;
     for (let j = 0; j < dots.length; j++) {
       const r = j + 1;
       dots[j].className = r < p.round || (r === p.round && p.k !== 'work') ? 'done' : r === p.round ? 'cur' : '';
     }
-    const n = ph[i + 1];
-    $('next').textContent = n ? `Далее: ${NAMES[n.k].toLowerCase()} ${fmt(n.d)}` : 'Далее: финиш';
+    renderPP();
+  }
+
+  function renderPP() {
+    const p = R.tl.ph[R.idx], n = R.tl.ph[R.idx + 1], running = !!R.t0, reps = !p.d;
+    $('pp').innerHTML = !running ? ICON_PLAY : reps ? ICON_DONE : ICON_PAUSE;
+    $('pp').setAttribute('aria-label', !running ? 'Продолжить' : reps ? 'Готово' : 'Пауза');
+    $('run').classList.toggle('paused', !running);
+    $('next').textContent = !running ? 'Пауза — нажмите ▶'
+      : !n ? 'Далее: финиш'
+      : `Далее: ${(n.k === 'work' && n.name ? n.name : NAMES[n.k]).toLowerCase()} ${n.reps ? '×' + n.reps : fmt(n.d)}`;
+  }
+
+  function setNum(txt) {
+    if (txt === R.num) return;
+    R.num = txt;
+    $('num').textContent = txt;
+    $('num').classList.toggle('long', txt.includes(':'));
+  }
+
+  // Move to the next phase with `carry` ms already spent in it
+  function advance(carry) {
+    R.idx++;
+    R.pBase = carry;
+    if (R.idx < R.tl.ph.length) return true;
+    finish();
+    return false;
   }
 
   function tick() {
     if (!R) return;
-    const e = elapsed() / 1000, tl = R.tl;
-    if (e >= tl.total) return finish();
-    const i = phaseAt(e), p = tl.ph[i];
-    if (i !== R.idx) {
-      R.idx = i;
+    fold();
+    const tl = R.tl;
+    let p = tl.ph[R.idx];
+    while (p.d && R.pBase >= p.d * 1000) {
+      if (!advance(R.pBase - p.d * 1000)) return;
+      p = tl.ph[R.idx];
+    }
+    if (R.shown !== R.idx) {
+      R.shown = R.idx;
       R.cue = 0;
-      enter(p, i);
-      if (R.t0 && e - p.start < 0.5) (p.k === 'work' ? cue.work : p.k === 'prep' ? () => {} : cue.rest)();
+      enter(p);
+      if (R.t0 && R.pBase < 500 && p.k !== 'prep') (p.k === 'work' ? cue.work : cue.rest)();
     }
-    const rem = p.start + p.d - e, sec = Math.ceil(rem);
-    if (sec <= 3 && sec < p.d && sec !== R.cue) {
-      R.cue = sec;
-      if (R.t0 && sec - rem < 0.5) cue.tick();
+    const e = R.pBase / 1000;
+    if (p.d) {
+      const rem = p.d - e, sec = Math.ceil(rem);
+      if (sec <= 3 && sec < p.d && sec !== R.cue) {
+        R.cue = sec;
+        if (R.t0 && sec - rem < 0.5) cue.tick();
+      }
+      setNum(fmt(sec).replace(/^0:0?/, ''));
+      $('unit').textContent = '';
+      $('arc').style.strokeDashoffset = (100 * (1 - rem / p.d)).toFixed(2);
+    } else {
+      setNum(String(p.reps));
+      $('unit').textContent = `${pl(p.reps, 'повторение', 'повторения', 'повторений')} · ${fmt(Math.floor(e))}`;
+      $('arc').style.strokeDashoffset = '0';
     }
-    const txt = fmt(sec).replace(/^0:0?/, '');
-    if (txt !== R.num) {
-      R.num = txt;
-      $('num').textContent = txt;
-      $('num').classList.toggle('long', txt.includes(':'));
-    }
-    $('arc').style.strokeDashoffset = (100 * (1 - rem / p.d)).toFixed(2);
-    $('left').textContent = fmt(Math.ceil(tl.total - e));
-    $('barFill').style.width = (100 * e / tl.total).toFixed(2) + '%';
+    const passed = p.start + Math.min(e, p.est);
+    $('left').textContent = (tl.exact ? '' : '≈') + fmt(Math.ceil(tl.total - passed));
+    $('elapsed').textContent = 'Прошло ' + fmt(Math.floor(R.wBase / 1000));
+    $('barFill').style.width = (100 * passed / tl.total).toFixed(2) + '%';
   }
 
-  function renderPP() {
-    const running = R && R.t0;
-    $('pp').innerHTML = running ? ICON_PAUSE : ICON_PLAY;
-    $('pp').setAttribute('aria-label', running ? 'Пауза' : 'Продолжить');
-    $('run').classList.toggle('paused', !running);
-    if (R && !running) $('next').textContent = 'Пауза — нажмите ▶';
-    else if (R && R.idx >= 0) enter(R.tl.ph[R.idx], R.idx);
-  }
-
-  function toggle() {
+  // Big button: resume when paused, «Готово» on a reps exercise, pause otherwise
+  function primary() {
     if (!R) return;
     unlock();
-    if (R.t0) { R.base = elapsed(); R.t0 = 0; stopLoop(); release(); }
+    if (R.t0 && !R.tl.ph[R.idx].d) return skip();
+    fold();
+    if (R.t0) { R.t0 = 0; stopLoop(); release(); }
     else { R.t0 = Date.now(); lock(); startLoop(); }
     renderPP();
     tick();
   }
 
-  function seek(sec) {
-    R.base = sec * 1000;
-    if (R.t0) R.t0 = Date.now();
-    R.idx = -1;
+  function skip() {
+    if (!R) return;
+    unlock();
+    fold();
+    if (advance(0)) tick();
+  }
+
+  function back() {
+    if (!R) return;
+    unlock();
+    fold();
+    if (R.pBase <= 2000 && R.idx > 0) R.idx--;
+    R.pBase = 0;
+    R.shown = -1;
     tick();
-    if (R && !R.t0) renderPP();
   }
 
   function finish() {
     stopLoop();
     release();
     cue.done();
-    $('doneTotal').textContent = fmt(R.tl.total);
-    $('doneMeta').textContent = metaText(cfg);
+    $('doneTotal').textContent = fmt(Math.floor(R.wBase / 1000));
+    $('doneMeta').textContent = metaText(R.tl);
     R = null;
     show('done');
   }
@@ -597,20 +717,10 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   $('go').addEventListener('click', start);
   $('again').addEventListener('click', start);
   $('toSetup').addEventListener('click', () => show('setup'));
-  $('pp').addEventListener('click', toggle);
-  $('ring').addEventListener('click', toggle);
-  $('fwd').addEventListener('click', () => {
-    if (!R) return;
-    unlock();
-    const n = R.tl.ph[R.idx + 1];
-    seek(n ? n.start : R.tl.total);
-  });
-  $('back').addEventListener('click', () => {
-    if (!R) return;
-    unlock();
-    const p = R.tl.ph[R.idx];
-    seek(elapsed() / 1000 - p.start > 2 || R.idx === 0 ? p.start : R.tl.ph[R.idx - 1].start);
-  });
+  $('pp').addEventListener('click', primary);
+  $('ring').addEventListener('click', primary);
+  $('fwd').addEventListener('click', skip);
+  $('back').addEventListener('click', back);
 
   let armed = 0;
   const disarm = () => { clearTimeout(armed); armed = 0; $('stop').classList.remove('armed'); };
@@ -625,6 +735,7 @@ button:focus-visible { outline: 3px solid var(--setrest); outline-offset: 2px; }
   });
 
   renderSound();
+  renderRows();
   renderSetup();
   show('setup');
 })();
